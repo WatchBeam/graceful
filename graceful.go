@@ -34,6 +34,10 @@ type Server struct {
 	// Limit the number of outstanding requests
 	ListenLimit int
 
+	// Creates a new network listener. Defaults to net.Listen
+	// if not passed.
+	CreateListener func(net, laddr string) (net.Listener, error)
+
 	// ConnState specifies an optional callback function that is
 	// called when a client connection changes state. This is a proxy
 	// to the underlying http.Server's ConnState, and the original
@@ -102,7 +106,7 @@ func (srv *Server) ListenAndServe() error {
 	if addr == "" {
 		addr = ":http"
 	}
-	l, err := net.Listen("tcp", addr)
+	l, err := srv.listen("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -147,7 +151,7 @@ func (srv *Server) ListenTLS(certFile, keyFile string) (net.Listener, error) {
 		return nil, err
 	}
 
-	conn, err := net.Listen("tcp", addr)
+	conn, err := srv.listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +177,7 @@ func (srv *Server) ListenAndServeTLSConfig(config *tls.Config) error {
 		addr = ":https"
 	}
 
-	conn, err := net.Listen("tcp", addr)
+	conn, err := srv.listen("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -255,6 +259,15 @@ func (srv *Server) StopChan() <-chan struct{} {
 	}
 	srv.chanLock.Unlock()
 	return srv.stopChan
+}
+
+func (s *Server) listen(network, laddr string) (net.Listener, error) {
+	fn := s.CreateListener
+	if fn == nil {
+		return net.Listen(network, laddr)
+	}
+
+	return fn(network, laddr)
 }
 
 func (srv *Server) manageConnections(add, remove chan net.Conn, shutdown chan chan struct{}, kill chan struct{}) {
